@@ -1036,24 +1036,26 @@ export default function PromptBuilder({ onBuiltPrompt, className }: PromptBuilde
       </CardHeader>
       <CardContent className="p-0">
         <Tabs defaultValue="presets" className="flex flex-col">
-          <TabsList className="grid w-full grid-cols-5 bg-gray-800/50 rounded-none">
-            <TabsTrigger value="presets" className="data-[state=active]:bg-purple-900/50">
+          <TabsList
+            className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 bg-gray-800/50 rounded-none overflow-x-auto scrollbar-hide min-w-0"
+          >
+            <TabsTrigger value="presets" className="data-[state=active]:bg-purple-900/50 text-xs sm:text-sm truncate">
               <Sparkles className="h-4 w-4 mr-2" />
               Presets
             </TabsTrigger>
-            <TabsTrigger value="genres" className="data-[state=active]:bg-purple-900/50">
+            <TabsTrigger value="genres" className="data-[state=active]:bg-purple-900/50 text-xs sm:text-sm truncate">
               <Disc className="h-4 w-4 mr-2" />
               Genres ({selectedGenres.length})
             </TabsTrigger>
-            <TabsTrigger value="instruments" className="data-[state=active]:bg-purple-900/50">
+            <TabsTrigger value="instruments" className="data-[state=active]:bg-purple-900/50 text-xs sm:text-sm truncate">
               <Guitar className="h-4 w-4 mr-2" />
               Instruments ({selectedInstruments.length})
             </TabsTrigger>
-            <TabsTrigger value="elements" className="data-[state=active]:bg-purple-900/50">
+            <TabsTrigger value="elements" className="data-[state=active]:bg-purple-900/50 text-xs sm:text-sm truncate">
               <Layers className="h-4 w-4 mr-2" />
               Elements ({selectedElements.length})
             </TabsTrigger>
-            <TabsTrigger value="moods" className="data-[state=active]:bg-purple-900/50">
+            <TabsTrigger value="moods" className="data-[state=active]:bg-purple-900/50 text-xs sm:text-sm truncate">
               <Waveform className="h-4 w-4 mr-2" />
               Moods ({selectedMoods.length})
             </TabsTrigger>
