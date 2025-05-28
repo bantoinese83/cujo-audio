@@ -99,7 +99,5 @@ MIT License. See [LICENSE](LICENSE) for details.
 - [GitHub Issues](https://github.com/your-username/cujo-audio/issues)
 - [Project Website](https://cujo-audio.vercel.app/)
 - [Google Gemini API](https://ai.google.dev/)
-
 ---
-
 > Made with ❤️ by the Cujo Audio team 
