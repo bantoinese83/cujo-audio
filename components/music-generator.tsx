@@ -39,6 +39,11 @@ export default function MusicGenerator() {
   // Local UI state
   const [showEnhancer, setShowEnhancer] = useState<boolean>(false)
   const [showPromptBuilder, setShowPromptBuilder] = useState<boolean>(false)
+  const [showStemModal, setShowStemModal] = useState(false)
+  const [stemLoading, setStemLoading] = useState(false)
+  const [stemError, setStemError] = useState<string | null>(null)
+  const [stems, setStems] = useState<{ vocals: string; accompaniment: string; vocalsFilename: string; accompanimentFilename: string } | null>(null)
+  const audioBlobRef = useRef<Blob | null>(null)
 
   // Refs
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -227,6 +232,41 @@ export default function MusicGenerator() {
         .padStart(2, "0")} 0%, transparent ${prompt.weight * 50}%)`
     })
     .join(", ")
+
+  // Function to export audio (simulate for now)
+  const handleExportAudio = async () => {
+    // TODO: Replace with actual audio export logic from your app
+    // For now, simulate with a dummy blob
+    if (!outputNodeRef.current) {
+      toast({ title: "No audio to export", description: "Generate music first." })
+      return
+    }
+    // Simulate: create a blank WAV file (replace with real audio export)
+    const dummyWav = new Uint8Array([82,73,70,70,36,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,68,172,0,0,2,0,16,0,100,97,116,97,0,0,0,0])
+    const blob = new Blob([dummyWav], { type: "audio/wav" })
+    audioBlobRef.current = blob
+    setShowStemModal(true)
+  }
+
+  // Function to upload audio and get stems
+  const handleUploadForStems = async () => {
+    if (!audioBlobRef.current) return
+    setStemLoading(true)
+    setStemError(null)
+    setStems(null)
+    try {
+      const formData = new FormData()
+      formData.append("file", audioBlobRef.current, "music.wav")
+      const res = await fetch("/api/separate-stems", { method: "POST", body: formData })
+      if (!res.ok) throw new Error("Stem separation failed")
+      const data = await res.json()
+      setStems(data)
+    } catch (err: any) {
+      setStemError(err.message || "Unknown error")
+    } finally {
+      setStemLoading(false)
+    }
+  }
 
   return (
     <motion.div
@@ -447,6 +487,54 @@ export default function MusicGenerator() {
           </StateWrapper>
         </motion.div>
       </motion.div>
+
+      {/* Stem Separation Section */}
+      <div className="mt-6 flex flex-col items-center">
+        <Button onClick={handleExportAudio} className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 mb-2">
+          Export & Separate Stems
+        </Button>
+        {showStemModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6 relative">
+              <Button variant="ghost" size="icon" className="absolute top-2 right-2" onClick={() => setShowStemModal(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+              <h3 className="text-lg font-bold mb-2 text-white">Stem Separation</h3>
+              <p className="text-gray-400 text-sm mb-4">Upload your generated music to separate vocals and accompaniment using Spleeter.</p>
+              <Button onClick={handleUploadForStems} disabled={stemLoading} className="w-full mb-4">
+                {stemLoading ? "Separating..." : "Upload & Separate"}
+              </Button>
+              {stemError && <div className="text-red-400 text-sm mb-2">{stemError}</div>}
+              {stems && (
+                <div className="space-y-2 mt-2">
+                  <a
+                    href={`data:audio/wav;base64,${stems.vocals}`}
+                    download={stems.vocalsFilename}
+                    className="block text-blue-400 underline"
+                  >
+                    Download Vocals
+                  </a>
+                  <a
+                    href={`data:audio/wav;base64,${stems.accompaniment}`}
+                    download={stems.accompanimentFilename}
+                    className="block text-blue-400 underline"
+                  >
+                    Download Accompaniment
+                  </a>
+                  <audio controls className="mt-2 w-full">
+                    <source src={`data:audio/wav;base64,${stems.vocals}`} type="audio/wav" />
+                    Your browser does not support the audio element.
+                  </audio>
+                  <audio controls className="mt-2 w-full">
+                    <source src={`data:audio/wav;base64,${stems.accompaniment}`} type="audio/wav" />
+                    Your browser does not support the audio element.
+                  </audio>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Info box */}
       <motion.div

@@ -1,0 +1,151 @@
+# Spleeter
+
+[![Github Actions](https://github.com/deezer/spleeter/actions/workflows/python-package.yml/badge.svg)](https://github.com/deezer/spleeter/actions/workflows/python-package.yml)
+[![PyPI](https://img.shields.io/pypi/v/spleeter.svg?style=flat-square)](https://pypi.org/project/spleeter/)
+![Python Version](https://img.shields.io/pypi/pyversions/spleeter.svg?style=flat-square)
+[![Conda](https://img.shields.io/conda/v/conda-forge/spleeter?style=flat-square)](https://anaconda.org/conda-forge/spleeter)
+[![Docker Pulls](https://img.shields.io/docker/pulls/deezer/spleeter.svg?style=flat-square)](https://hub.docker.com/r/deezer/spleeter)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deezer/spleeter/blob/master/spleeter.ipynb)
+[![Gitter chat status](https://img.shields.io/gitter/room/deezer/spleeter.svg?style=flat-square)](https://gitter.im/deezer/spleeter)
+
+> [!WARNING]
+> **Spleeter 2.1.0 release introduces some breaking changes**, including new CLI option naming for input, and the drop of dedicated GPU package. Please read [CHANGELOG](https://github.com/deezer/spleeter/blob/master/CHANGELOG.md) for more details.
+
+## About
+
+Spleeter is Deezer's source separation library with pretrained models written in Python and uses Tensorflow. It makes it easy to train source separation models (assuming you have a dataset of isolated sources), and provides already trained state-of-the-art models for performing various flavours of separation:
+
+*   Vocals (singing voice) / accompaniment separation (2 stems)
+*   Vocals / drums / bass / other separation (4 stems)
+*   Vocals / drums / bass / piano / other separation (5 stems)
+
+2 stems and 4 stems models have high performances on the musdb dataset. Spleeter is also very fast as it can perform separation of audio files to 4 stems 100x faster than real-time when run on a GPU.
+
+We designed Spleeter so you can use it straight from the command line as well as directly in your own development pipeline as a Python library. It can be installed with pip or be used with Docker.
+
+## Projects and Softwares using Spleeter
+
+Since it's been released, there are multiple forks exposing Spleeter through either a Guided User Interface (GUI) or a standalone free or paying website. Please note that we do not host, maintain or directly support any of these initiatives.
+
+That being said, many cool projects have been built on top of ours. Notably the porting to the Ableton Live ecosystem through the [Spleeter 4 Max](https://github.com/leoasm/spleeter4max) project.
+
+Spleeter pre-trained models have also been used by professional audio softwares. Here's a non-exhaustive list:
+
+*   iZotope in its Music Rebalance feature within RX 8
+*   SpectralLayers in its Unmix feature in SpectralLayers 7
+*   Acon Digital within Acoustica 7
+*   VirtualDJ in their stem isolation feature
+*   Algoriddim in their NeuralMix and djayPRO app suite
+
+🆕 Spleeter is a baseline in the ongoing [Music Demixing Challenge](https://www.aicrowd.com/challenges/music-demixing-challenge-2021)!
+
+## Spleeter Pro (Commercial version)
+
+Check out our commercial version: [Spleeter Pro](LINK_TO_SPLEETER_PRO). Benefit from our expertise for precise audio separation, faster processing speeds, and dedicated professional support.
+
+## Quick Start
+
+Want to try it out but don't want to install anything? We have set up a Google Colab notebook you can use directly:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/deezer/spleeter/blob/master/spleeter.ipynb)
+
+Ready to install and run Spleeter locally? Here's a quick guide:
+
+### Prerequisites: ffmpeg and libsndfile
+
+Spleeter relies on `ffmpeg` and `libsndfile` for audio input/output processing. These libraries are *not* installed by `pip` and typically need to be installed separately via your system's package manager *before* installing Spleeter.
+
+Here are common ways to install these dependencies:
+
+*   **Debian/Ubuntu (Linux):**
+    ```bash
+    sudo apt update
+    sudo apt install ffmpeg libsndfile1
+    ```
+*   **macOS (using Homebrew):**
+    ```bash
+    brew install ffmpeg libsndfile
+    ```
+*   **Windows:** Installing `ffmpeg` and `libsndfile` on Windows usually involves downloading pre-built binaries and adding their location to your system's PATH. Please refer to the official documentation for [ffmpeg](https://ffmpeg.org/download.html) and search for `libsndfile` Windows installation instructions online.
+
+> [!NOTE]
+> The previous recommendation was to use Conda for dependencies (`conda install -c conda-forge ffmpeg libsndfile`). While this *might* still work for some users, **we no longer recommend using Conda for installing spleeter and its dependencies** due to potential environment conflicts.
+
+### Installation
+
+Once `ffmpeg` and `libsndfile` are accessible on your system (check by running `ffmpeg -version` and `libsndfile -version` in your terminal), you can install Spleeter using pip:
+
+```bash
+pip install spleeter
+Use code with caution.
+Markdown
+Running Separation
+Download an example audio file:
+# If you don't have wget, you can use curl or download it manually
+wget https://github.com/deezer/spleeter/raw/master/audio_example.mp3
+# Alternative with curl:
+# curl -O https://github.com/deezer/spleeter/raw/master/audio_example.mp3
+Use code with caution.
+Bash
+Separate the example audio into two components (vocals and accompaniment):
+spleeter separate -p spleeter:2stems -o output audio_example.mp3
+Use code with caution.
+Bash
+[!NOTE]
+Windows Users: If the spleeter command doesn't work directly after installation, try running it using python -m spleeter instead:
+python -m spleeter separate -p spleeter:2stems -o output audio_example.mp3
+Use code with caution.
+Bash
+You should find two separated audio files (vocals.wav and accompaniment.wav) inside a new folder named output/audio_example.
+[!WARNING]
+There are known issues with Apple M1 chips, mostly due to TensorFlow compatibility. Until these are fixed, please refer to the Troubleshooting section in the wiki for a workaround.
+For more detailed documentation on installation, usage, and available models, please check the repository wiki.
+Development and Testing
+This project is managed using Poetry. To set up a development environment and run the test suite, execute the following commands:
+Clone spleeter repository:
+git clone https://github.com/Deezer/spleeter && cd spleeter
+Use code with caution.
+Bash
+Install poetry:
+pip install poetry
+Use code with caution.
+Bash
+Install spleeter dependencies using Poetry:
+poetry install
+Use code with caution.
+Bash
+Run unit test suite:
+poetry run pytest tests/
+Use code with caution.
+Bash
+Reference
+Deezer Research - Source Separation Engine Story - deezer.io blog post (English)
+Deezer Research - Source Separation Engine Story - deezer.io blog post (Japanese)
+Music Source Separation tool with pre-trained models / ISMIR2019 extended abstract
+If you use Spleeter in your work, please cite:
+@article{spleeter2020,
+  doi = {10.21105/joss.02154},
+  url = {https://doi.org/10.21105/joss.02154},
+  year = {2020},
+  publisher = {The Open Journal},
+  volume = {5},
+  number = {50},
+  pages = {2154},
+  author = {Romain Hennequin and Anis Khlif and Felix Voituret and Manuel Moussallam},
+  title = {Spleeter: a fast and efficient music source separation tool with pre-trained models},
+  journal = {Journal of Open Source Software},
+  note = {Deezer Research}
+}
+Use code with caution.
+Bibtex
+License
+The code of Spleeter is MIT-licensed.
+Disclaimer
+If you plan to use Spleeter on copyrighted material, make sure you get proper authorization from right owners beforehand.
+Troubleshooting
+Spleeter is a complex piece of software and although we continuously try to improve and test it you may encounter unexpected issues running it. If that's the case please check the FAQ page first as well as the list of currently open issues.
+(Note: The specific mention for Windows users regarding the command shortcut has been integrated into the Quick Start section.)
+Contributing
+If you would like to participate in the development of Spleeter you are more than welcome to do so. Don't hesitate to throw us a pull request and we'll do our best to examine it quickly. Please check out our guidelines first.
+Audio Example Source
+This repository includes a demo audio file audio_example.mp3 which is an excerpt from Slow Motion Dream by Steven M Bryant (c) copyright 2011 Licensed under a Creative Commons Attribution (3.0) license Ft: CSoul, Alex Beroza & Robert Siekawitch.
