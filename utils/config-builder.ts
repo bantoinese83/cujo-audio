@@ -135,7 +135,9 @@ export class MusicConfigBuilder {
    */
   applyUpdates(updates: Record<string, any>) {
     Object.entries(updates).forEach(([key, value]) => {
-      if (value === undefined) return
+      if (value === undefined) {
+        return
+      }
 
       this.config[key] = value
     })

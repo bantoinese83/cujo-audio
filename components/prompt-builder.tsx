@@ -946,12 +946,22 @@ export default function PromptBuilder({ onBuiltPrompt, className }: PromptBuilde
   // Build prompt logic
   const buildPrompt = useCallback(() => {
     const promptParts = []
-    if (selectedGenres.length > 0) promptParts.push(selectedGenres.join(", "))
-    if (selectedMoods.length > 0) promptParts.push(selectedMoods.join(", "))
-    if (selectedElements.length > 0) promptParts.push(selectedElements.join(", "))
-    if (selectedInstruments.length > 0) promptParts.push(`with ${selectedInstruments.join(", ")}`)
+    if (selectedGenres.length > 0) {
+      promptParts.push(selectedGenres.join(", "))
+    }
+    if (selectedMoods.length > 0) {
+      promptParts.push(selectedMoods.join(", "))
+    }
+    if (selectedElements.length > 0) {
+      promptParts.push(selectedElements.join(", "))
+    }
+    if (selectedInstruments.length > 0) {
+      promptParts.push(`with ${selectedInstruments.join(", ")}`)
+    }
     const finalPrompt = promptParts.join(" ")
-    if (finalPrompt) onBuiltPrompt(finalPrompt)
+    if (finalPrompt) {
+      onBuiltPrompt(finalPrompt)
+    }
   }, [selectedGenres, selectedMoods, selectedInstruments, selectedElements, onBuiltPrompt])
 
   // Clear all
@@ -965,7 +975,9 @@ export default function PromptBuilder({ onBuiltPrompt, className }: PromptBuilde
   // Filtering
   const filterItemsBySearchTerm = useCallback(
     (items: string[]) => {
-      if (!searchTerm) return items
+      if (!searchTerm) {
+        return items
+      }
       return items.filter((item) => item.toLowerCase().includes(searchTerm.toLowerCase()))
     },
     [searchTerm],
@@ -1007,7 +1019,9 @@ export default function PromptBuilder({ onBuiltPrompt, className }: PromptBuilde
   // Preset search filtering
   const getSearchFilteredPresets = useCallback(() => {
     const categoryFilteredPresets = getFilteredPresetsByCategory()
-    if (!searchTerm) return categoryFilteredPresets
+    if (!searchTerm) {
+      return categoryFilteredPresets
+    }
     return categoryFilteredPresets.filter(
       (preset) =>
         preset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
