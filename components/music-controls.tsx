@@ -4,11 +4,11 @@ import { memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { PlayCircle, PauseCircle, RefreshCw, Loader2, Music } from "lucide-react"
+import { PlayCircle, PauseCircle, RefreshCw, Loader2, Music, Square } from "lucide-react"
 import type { MusicControlsProps } from "@/types/app-types"
 import { colors } from "@/lib/design-system"
 
-function MusicControls({ playbackState, onPlayPause, onReset, disabled = false }: MusicControlsProps) {
+function MusicControls({ playbackState, onPlayPause, onReset, onStop, disabled = false }: MusicControlsProps) {
   const isPlaying = playbackState === "playing"
   const isLoading = playbackState === "loading"
 
@@ -51,6 +51,7 @@ function MusicControls({ playbackState, onPlayPause, onReset, disabled = false }
 
         {/* Main controls */}
         <div className="flex items-center gap-4 relative z-10">
+          {/* Play/Pause button */}
           <motion.div whileHover={{ scale: disabled ? 1 : 1.1 }} whileTap={{ scale: disabled ? 1 : 0.9 }}>
             <Button
               onClick={onPlayPause}
@@ -112,28 +113,29 @@ function MusicControls({ playbackState, onPlayPause, onReset, disabled = false }
             </Button>
           </motion.div>
 
+          {/* Stop button */}
+          <motion.div whileHover={{ scale: disabled ? 1 : 1.1 }} whileTap={{ scale: disabled ? 1 : 0.9 }}>
+            <Button
+              onClick={onStop}
+              variant="outline"
+              size="icon"
+              className="h-12 w-12 rounded-full"
+              disabled={disabled || playbackState === "stopped"}
+            >
+              <Square className="h-5 w-5" />
+            </Button>
+          </motion.div>
+
+          {/* Reset button */}
           <motion.div whileHover={{ scale: disabled ? 1 : 1.1 }} whileTap={{ scale: disabled ? 1 : 0.9 }}>
             <Button
               onClick={onReset}
               variant="outline"
               size="icon"
-              className={`h-12 w-12 rounded-full ${
-                disabled
-                  ? "border-gray-700 text-gray-500 hover:bg-transparent cursor-not-allowed"
-                  : "border-gray-700 hover:border-purple-500 transition-colors duration-300"
-              }`}
+              className="h-12 w-12 rounded-full"
               disabled={disabled}
             >
-              <motion.div
-                animate={{ rotate: isPlaying && !disabled ? 360 : 0 }}
-                transition={{
-                  duration: 2,
-                  repeat: isPlaying && !disabled ? Number.POSITIVE_INFINITY : 0,
-                  ease: "linear",
-                }}
-              >
-                <RefreshCw className="h-6 w-6" />
-              </motion.div>
+              <RefreshCw className="h-6 w-6" />
             </Button>
           </motion.div>
         </div>

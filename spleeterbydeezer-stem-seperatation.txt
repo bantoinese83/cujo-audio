@@ -149,3 +149,160 @@ Contributing
 If you would like to participate in the development of Spleeter you are more than welcome to do so. Don't hesitate to throw us a pull request and we'll do our best to examine it quickly. Please check out our guidelines first.
 Audio Example Source
 This repository includes a demo audio file audio_example.mp3 which is an excerpt from Slow Motion Dream by Steven M Bryant (c) copyright 2011 Licensed under a Creative Commons Attribution (3.0) license Ft: CSoul, Alex Beroza & Robert Siekawitch.
+
+
+2. Getting started
+Romain Hennequin edited this page on Apr 2, 2021 · 22 revisions
+Usage
+Separate sources
+Using 2stems model
+Using 4stems model
+Using 5stems model
+Using models up to 16kHz
+Batch processing
+Exported filename format
+Train model
+Evaluate model
+Using Docker image
+Available images
+Run container
+Usage
+Once installed, Spleeter can be used directly from any CLI through the spleeter command. It provides three action with following subcommand :
+
+Command	Description
+separate	Separate audio files using pretrained model
+train	Train a source separation model. You need a dataset of separated tracks to use it
+evaluate	Pretrained model evaluation over musDB test set
+Separate sources
+To get help on the different options available with the separate command, type:
+
+spleeter separate --help
+If you are using the GPU version and want to specify the device card number, you'll need to set the CUDA_VISIBLE_DEVICES variable.
+
+Using 2stems model
+You can straightforwardly separate audio files with the default 2 stems (vocals / accompaniment) pretrained model like following1 :
+
+spleeter separate -o audio_output audio_example.mp3 
+1 be sure to be in the spleeter folder if you are using cloned repository or replace audio_example.mp3 by a valid path to an audio file).
+
+You can provide either a single or a list of files as argument (even using wildcard patterns if supported by your shell). The -o is for providing the output path where to write the separated wav files. The command may take quite some time to execute at first run, since it will download the pre-trained model. If everything goes well, you should then get a folder audio_output/audio_example that contains two files: accompaniment.wav and vocals.wav.
+
+⚠️ In versions prior to 2.1 files were passed with the -i option but it's no longer the case
+
+Using 4stems model
+You can also use a pretrained 4 stems (vocals / bass / drums / other ) model :
+
+spleeter separate -o audio_output -p spleeter:4stems audio_example.mp3
+The -p option is for providing the model settings. It could be either a Spleeter embedded setting identifier2 or a path to a JSON file configuration such as this one.
+
+This time, it will generate four files: vocals.wav, drums.wav, bass.wav and other.wav.
+
+2 at this time, following embedded configuration are available :
+
+spleeter:2stems
+spleeter:4stems
+spleeter:5stems
+Using 5stems model
+Finally a pretrained 5 stems (vocals / bass / drums / piano / other) model is also available out of the box :
+
+spleeter separate -o audio_output -p spleeter:5stems audio_example.mp3
+Which would generate five files: vocals.wav, drums.wav, bass.wav, piano.wav and other.wav.
+
+Using models up to 16kHz
+All the previous models (spleeter:2stems, spleeter:4stems and spleeter:5stems) performs separation up to 11kHz. There also exists 16kHz versions of the same models (resp. (spleeter:2stems-16kHz, spleeter:4stems-16kHz and spleeter:5stems-16kHz)). They can be used the same way:
+
+spleeter separate -o audio_output -p spleeter:4stems-16kHz audio_example.mp3 
+For more details read this FAQ.
+
+Batch processing
+separate command builds the model each time it is called and downloads it the first time. This process may be long compared to the separation process by itself if you process a single audio file (especially a short one). If you have several files to separate, it is then recommended to perform all separation with a single call to separate:
+
+spleeter separate \
+     -o audio_output \
+     <path/to/audio1.mp3> <path/to/audio2.wav> <path/to/audio3.ogg> 
+Exported filename format
+the -f option makes it possible to format the name and folder of the output audio files. The following keyword can be used:
+
+filename: input file name (without extension).
+instrument: name of the separated instrument
+foldername: name of the folder the input file is in
+codec: extension of the output audio files.
+They should be used between curly brackets within the formatting string.
+
+For instance:
+
+spleeter separate \
+     -o audio_output \
+     /path/to/audio_folder/song.mp3 \
+     -f {foldername}/{filename}_{instrument}.{codec}
+will output the following files audio_output/audio_folder/song_vocals.wav and audio_output/audio_folder/song_accompaniment.wav
+
+Train model
+For training your own model, you need:
+
+A dataset of separated files such as musDB.
+Dataset must be described in CSV files : one for training and one for validation) which are used for generating training data.
+A JSON configuration file such as this one that gathers all parameters needed for training and paths to CSV file.
+Once your train configuration is setup, you can run model training as following :
+
+spleeter train -p configs/musdb_config.json -d </path/to/musdb>
+Evaluate model
+For evaluating a model, you need the musDB dataset. You can for instance evaluate the provided 4 stems pre-trained model this way:
+
+spleeter evaluate -p spleeter:4stems --mus_dir </path/to/musdb> -o eval_output
+For using multi-channel Wiener filtering for performing the separation, you need to add the --mwf option (to get the results reported in the paper):
+
+spleeter evaluate -p spleeter:4stems --mus_dir </path/to/musdb> -o eval_output --mwf
+Using Docker image
+Docker Pulls
+
+We are providing official Docker images for using Spleeter. You need first to install Docker, for instance the Docker Community Edition.
+
+Available images
+To be documented
+
+Run container
+Built images entrypoint is Spleeter main command spleeter. Thus you can run the separate command by running this previously built image using docker run3 command with a mounted directory for output writing :
+
+docker run -v $(pwd)/output:/output deezer/spleeter separate -o /output audio_example.mp3
+If you want to run the image with GPU device support you can use the dedicated GPU image :
+
+# If you have nvidia-docker:
+nvidia-docker run -v $(pwd)/output:/output deezer/spleeter-gpu separate -o /output audio_example.mp3
+
+# Or if your docker client version is high enough to support `Nvidia` runtime :
+docker run --runtime=nvidia -v $(pwd)/output:/output deezer/spleeter-gpu separate -o /output audio_example.mp3
+3 For running command over GPU, you should use nvidia-docker command instead of docker command. This alternative command allows container to access Nvidia driver and the GPU devices from host.
+
+This will separate the audio file provided as input (here audio_example.mp3 which is embedded in the built image) and put the separated files vocals.wav and accompaniment.wav on your computer in the mounted output folder output/audio_example.
+
+For using your own audio file you will need to create container volume when running the image, we also suggest you to create a volume for storing downloaded model. This will avoid Spleeter to download model files each time you run the image.
+
+To do so let's first create some environment variable :
+
+export AUDIO_IN='/path/to/directory/with/audio/file'
+export AUDIO_OUT='/path/to/write/separated/source/into'
+export MODEL_DIRECTORY='/path/to/model/storage'
+Then we can run the separate command through container :
+
+docker run \
+    -v $AUDIO_IN:/input \
+    -v $AUDIO_OUT:/output \
+    -v $MODEL_DIRECTORY:/model \
+    -e MODEL_PATH=/model \
+    deezer/spleeter \
+    separate -o /output /input/audio_1.mp3 /input/audio_2.mp3
+⚠️ As for non docker usage we recommend you to perform separation of multiple file with a single call on Spleeter image.
+
+You can use the train command (that you should mainly use with a GPU as it is very computationally expensive), as well as the evaluate command, that performs evaluation on the musDB test dataset4 using museval
+
+# Model training.
+nvidia-docker run -v </path/to/musdb>:/musdb deezer/spleeter-gpu train -p configs/musdb_config.json -d /musdb
+
+# Model evaluation.
+nvidia-docker run -v $(pwd)/eval_output:/eval_output -v </path/to/musdb>:/musdb deezer/spleeter-gpu evaluate -p spleeter:4stems --mus_dir /musdb -o /eval_output
+4 You need to request access and download it from here
+
+The separation process should be quite fast on a GPU (should be less than 90s on the musdb test set) but the execution of museval takes much more time (a few hours).
+
+© Deezer

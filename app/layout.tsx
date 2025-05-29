@@ -6,6 +6,8 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Suspense } from "react"
+import Header from "@/components/Header"
+import Footer from "@/components/Footer"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,9 +24,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={inter.className + " min-h-screen flex flex-col"}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          <Suspense>{children}</Suspense>
+          <Header />
+          <main className="flex-1 flex flex-col">
+            <Suspense>{children}</Suspense>
+          </main>
+          <Footer />
           <Toaster />
           <Analytics />
         </ThemeProvider>

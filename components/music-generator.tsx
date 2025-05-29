@@ -23,6 +23,9 @@ import type { SessionInitOptions } from "@/types/app-types"
 import type { MusicGenerationConfig } from "@/types/music"
 import { ToastMessage } from "@/components/toast-message"
 import type { ToastMessageRef } from "@/components/toast-message"
+import { createSupabaseClient } from '@/utils/supabaseClient'
+import { Dialog, DialogContent, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { useSpring, animated } from '@react-spring/web'
 
 /**
  * Main component for the music generation application
@@ -42,15 +45,44 @@ export default function MusicGenerator() {
   const [showStemModal, setShowStemModal] = useState(false)
   const [stemLoading, setStemLoading] = useState(false)
   const [stemError, setStemError] = useState<string | null>(null)
-  const [stems, setStems] = useState<{ vocals: string; accompaniment: string; vocalsFilename: string; accompanimentFilename: string } | null>(null)
-  const audioBlobRef = useRef<Blob | null>(null)
+  const [stemCount, setStemCount] = useState<2 | 4 | 5>(2)
+  const [stems, setStems] = useState<Record<string, { data: string; filename: string }> | null>(null)
+  const [musicSaved, setMusicSaved] = useState(false)
+  const [savingMusic, setSavingMusic] = useState(false)
+  const [trackId, setTrackId] = useState<string | null>(null)
+  const supabase = createSupabaseClient()
 
   // Refs
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const toastRef = useRef<ToastMessageRef>(null)
 
   // Music session hooks
-  const { initSession, updatePrompts, updateSettings, play, pause, stop, resetContext, audioContextRef, outputNodeRef } = useMusicSessionWithStore()
+  const {
+    initSession, updatePrompts, updateSettings, play, pause, stop, stopAndWaitForAudio, resetContext, audioContextRef, outputNodeRef, audioBlobRef
+  } = useMusicSessionWithStore((sizeBytes) => {
+    setAudioSizeMB(Number((sizeBytes / (1024 * 1024)).toFixed(2)))
+  })
+
+  // Timer state for streaming duration
+  const [streamingTime, setStreamingTime] = useState(0);
+  const [timerActive, setTimerActive] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Add a dynamic indicator for recording state
+  const isRecording = state.playbackState === "playing"
+
+  // Add state for stem separation progress
+  const [stemStep, setStemStep] = useState<'idle' | 'uploading' | 'separating' | 'saving' | 'complete'>('idle')
+
+  // Add state for save dialog
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+
+  // Add state for audio size
+  const [audioSizeMB, setAudioSizeMB] = useState(0)
+  const maxAudioSizeMB = 20 // For progress bar visual cap
+
+  // Animated spring for the number
+  const audioSizeSpring = useSpring({ val: audioSizeMB, config: { tension: 170, friction: 26 } })
 
   // Initialize the app and set isInitializing to false after a short delay
   useEffect(() => {
@@ -108,6 +140,41 @@ export default function MusicGenerator() {
       setCurrentStep(3)
     }
   }, [state.prompts.size, state.playbackState, setCurrentStep])
+
+  // Start/stop timer based on playback state
+  useEffect(() => {
+    if (state.playbackState === "playing") {
+      setTimerActive(true);
+      if (!timerRef.current) {
+        timerRef.current = setInterval(() => {
+          setStreamingTime((t) => t + 1);
+        }, 1000);
+      }
+    } else {
+      setTimerActive(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    // Reset timer on reset or new session
+    if (state.playbackState === "stopped") {
+      setTimerActive(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.playbackState]);
+
+  // Reset timer when prompts change (new session)
+  useEffect(() => {
+    setStreamingTime(0);
+  }, [state.prompts.size]);
+
+  // Format timer as mm:ss
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
 
   /**
    * Handles adding a new prompt
@@ -233,40 +300,149 @@ export default function MusicGenerator() {
     })
     .join(", ")
 
+  // Function to save generated music to Supabase Storage and DB
+  const handleSaveMusic = async () => {
+    if (!audioBlobRef.current) {
+      toast({ title: 'No audio to save', description: 'Generate music first.' })
+      return
+    }
+    setSavingMusic(true)
+    setMusicSaved(false)
+    try {
+      // Get user
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        throw new Error('Not logged in')
+      }
+
+      // Ensure profile row exists for this user
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (!profile) {
+        const { error: insertProfileError } = await supabase.from('profiles').insert({
+          id: user.id,
+          full_name: user.user_metadata?.full_name || user.email,
+          avatar_url: user.user_metadata?.avatar_url || null,
+        });
+        if (insertProfileError) {
+          throw insertProfileError;
+        }
+      }
+
+      // Upload to Storage
+      const fileName = `music_${Date.now()}.wav`
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('music').upload(fileName, audioBlobRef.current, { upsert: true, contentType: 'audio/wav' })
+      if (uploadError) {
+        throw uploadError
+      }
+      const audioUrl = supabase.storage.from('music').getPublicUrl(fileName).data.publicUrl
+      // Insert to DB
+      const { data: track, error: dbError } = await supabase.from('music_tracks').insert({
+        user_id: user.id,
+        title: fileName,
+        audio_url: audioUrl,
+        prompt: state.newPromptText,
+        is_public: true,
+      }).select().maybeSingle()
+      if (dbError) {
+        throw dbError
+      }
+      setTrackId(track.id)
+      setMusicSaved(true)
+      toast({ title: 'Music saved!', description: 'Your track is now in your library.' })
+    } catch (err: any) {
+      toast({ title: 'Save failed', description: err.message || 'Unknown error', variant: 'destructive' })
+    } finally {
+      setSavingMusic(false)
+    }
+  }
+
+  // Function to upload stems to Supabase Storage and DB
+  const handleSaveStems = async (stemsData: Record<string, { data: string; filename: string }>) => {
+    if (!trackId) {
+      return
+    }
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        throw new Error('Not logged in')
+      }
+      for (const [stem, { data, filename }] of Object.entries(stemsData)) {
+        const filePath = `stems/${trackId}/${filename}`
+        const audioBuffer = Uint8Array.from(atob(data), c => c.charCodeAt(0))
+        const { error: uploadError } = await supabase.storage.from('stems').upload(filePath, audioBuffer, { upsert: true, contentType: 'audio/wav' })
+        if (uploadError) {
+          throw uploadError
+        }
+        const audioUrl = supabase.storage.from('stems').getPublicUrl(filePath).data.publicUrl
+        await supabase.from('music_stems').insert({
+          track_id: trackId,
+          stem_type: stem,
+          audio_url: audioUrl,
+        })
+      }
+      // Mark track as stems_ready
+      await supabase.from('music_tracks').update({ stems_ready: true }).eq('id', trackId)
+      toast({ title: 'Stems saved!', description: 'Separated stems are now available.' })
+    } catch (err: any) {
+      toast({ title: 'Stem save failed', description: err.message || 'Unknown error', variant: 'destructive' })
+    }
+  }
+
   // Function to export audio (simulate for now)
   const handleExportAudio = async () => {
-    // TODO: Replace with actual audio export logic from your app
-    // For now, simulate with a dummy blob
-    if (!outputNodeRef.current) {
+    // Use the real audioBlobRef from the session
+    if (!audioBlobRef.current) {
       toast({ title: "No audio to export", description: "Generate music first." })
       return
     }
-    // Simulate: create a blank WAV file (replace with real audio export)
-    const dummyWav = new Uint8Array([82,73,70,70,36,0,0,0,87,65,86,69,102,109,116,32,16,0,0,0,1,0,1,0,68,172,0,0,68,172,0,0,2,0,16,0,100,97,116,97,0,0,0,0])
-    const blob = new Blob([dummyWav], { type: "audio/wav" })
-    audioBlobRef.current = blob
     setShowStemModal(true)
   }
 
   // Function to upload audio and get stems
   const handleUploadForStems = async () => {
-    if (!audioBlobRef.current) return
+    if (!audioBlobRef.current) {
+      return
+    }
+    setStemStep('uploading')
     setStemLoading(true)
     setStemError(null)
     setStems(null)
     try {
+      // Step 1: Uploading audio
       const formData = new FormData()
       formData.append("file", audioBlobRef.current, "music.wav")
+      formData.append("stems", String(stemCount))
+      setStemStep('separating')
+      // Step 2: Separating stems
       const res = await fetch("/api/separate-stems", { method: "POST", body: formData })
-      if (!res.ok) throw new Error("Stem separation failed")
+      if (!res.ok) {
+        throw new Error("Stem separation failed")
+      }
       const data = await res.json()
-      setStems(data)
+      setStemStep('saving')
+      // Step 3: Saving stems
+      setStems(data.stems)
+      await handleSaveStems(data.stems)
+      setStemStep('complete')
     } catch (err: any) {
       setStemError(err.message || "Unknown error")
+      setStemStep('idle')
     } finally {
       setStemLoading(false)
     }
   }
+
+  // Add a handler for Stop that stops playback and then shows the save dialog if appropriate
+  const handleStop = useCallback(async () => {
+    const blob = await stopAndWaitForAudio()
+    if (blob && !musicSaved && !savingMusic) {
+      setShowSaveDialog(true)
+    }
+  }, [stopAndWaitForAudio, musicSaved, savingMusic])
 
   return (
     <motion.div
@@ -420,6 +596,13 @@ export default function MusicGenerator() {
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                 transition={{ duration: 0.4 }}
               >
+                <div className="flex items-center gap-3 mb-2">
+                  {timerActive || streamingTime > 0 ? (
+                    <span className="inline-block bg-purple-900/70 text-purple-200 px-3 py-1 rounded-full text-xs font-mono shadow border border-purple-500/30 animate-pulse">
+                      ⏱ {formatTime(streamingTime)}
+                    </span>
+                  ) : null}
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -482,17 +665,42 @@ export default function MusicGenerator() {
               playbackState={state.playbackState}
               onPlayPause={handlePlayPause}
               onReset={handleReset}
+              onStop={handleStop}
               disabled={!state.isConnected || !!state.error || state.prompts.size === 0}
             />
+            {/* Recording indicator */}
+            <div className="flex items-center gap-2 mt-2 mb-2">
+              {isRecording && (
+                <span className="flex items-center gap-1 text-red-500 animate-pulse font-semibold text-sm">
+                  <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" /> Recording
+                </span>
+              )}
+            </div>
+            {/* Audio size indicator */}
+            <div className="flex items-center gap-2 mt-2 mb-2">
+              <div className="w-40 h-3 bg-gray-800 rounded-full overflow-hidden relative">
+                <div
+                  className="h-3 bg-blue-500 transition-all duration-300"
+                  style={{ width: `${Math.min((audioSizeMB / maxAudioSizeMB) * 100, 100)}%` }}
+                />
+                <div className="absolute inset-0 flex items-center justify-center text-xs text-blue-200 font-mono">
+                  <animated.span>
+                    {audioSizeSpring.val.to(val => `${val.toFixed(2)} MB`)}
+                  </animated.span>
+                </div>
+              </div>
+            </div>
           </StateWrapper>
         </motion.div>
       </motion.div>
 
       {/* Stem Separation Section */}
       <div className="mt-6 flex flex-col items-center">
-        <Button onClick={handleExportAudio} className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 mb-2">
-          Export & Separate Stems
-        </Button>
+        {musicSaved && (
+          <Button onClick={handleExportAudio} className="bg-gradient-to-r from-amber-600 to-purple-600 hover:from-amber-700 hover:to-purple-700 mb-2">
+            Export & Separate Stems
+          </Button>
+        )}
         {showStemModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="bg-gray-900 border border-gray-800 rounded-xl w-full max-w-md p-6 relative">
@@ -500,35 +708,56 @@ export default function MusicGenerator() {
                 <X className="h-4 w-4" />
               </Button>
               <h3 className="text-lg font-bold mb-2 text-white">Stem Separation</h3>
-              <p className="text-gray-400 text-sm mb-4">Upload your generated music to separate vocals and accompaniment using Spleeter.</p>
-              <Button onClick={handleUploadForStems} disabled={stemLoading} className="w-full mb-4">
-                {stemLoading ? "Separating..." : "Upload & Separate"}
+              <p className="text-gray-400 text-sm mb-4">Upload your generated music to separate stems using Spleeter.</p>
+              {/* Step Progress Indicator */}
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-xs font-semibold ${stemStep === 'uploading' ? 'text-blue-400' : 'text-gray-400'}`}>1. Uploading</span>
+                  <span className={`text-xs font-semibold ${stemStep === 'separating' ? 'text-purple-400' : 'text-gray-400'}`}>2. Separating</span>
+                  <span className={`text-xs font-semibold ${stemStep === 'saving' ? 'text-amber-400' : 'text-gray-400'}`}>3. Saving</span>
+                  <span className={`text-xs font-semibold ${stemStep === 'complete' ? 'text-green-400' : 'text-gray-400'}`}>4. Complete</span>
+                </div>
+                <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <div className={`h-2 transition-all duration-500 rounded-full ${stemStep === 'uploading' ? 'bg-blue-400 w-1/4' : stemStep === 'separating' ? 'bg-purple-400 w-2/4' : stemStep === 'saving' ? 'bg-amber-400 w-3/4' : stemStep === 'complete' ? 'bg-green-400 w-full' : 'w-0'}`}></div>
+                </div>
+              </div>
+              {/* End Step Progress Indicator */}
+              <div className="mb-4">
+                <label htmlFor="stem-count" className="block text-sm text-gray-300 mb-1">Number of Stems</label>
+                <select
+                  id="stem-count"
+                  value={stemCount}
+                  onChange={e => setStemCount(Number(e.target.value) as 2 | 4 | 5)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500"
+                  disabled={stemLoading}
+                >
+                  <option value={2}>2 (Vocals + Accompaniment)</option>
+                  <option value={4}>4 (Vocals, Drums, Bass, Other)</option>
+                  <option value={5}>5 (Vocals, Drums, Bass, Piano, Other)</option>
+                </select>
+              </div>
+              <Button onClick={handleUploadForStems} disabled={stemLoading || stemStep !== 'idle'} className="w-full mb-4">
+                {stemLoading ? (stemStep === 'uploading' ? 'Uploading...' : stemStep === 'separating' ? 'Separating...' : stemStep === 'saving' ? 'Saving...' : 'Processing...') : `Upload & Separate (${stemCount} stems)`}
               </Button>
               {stemError && <div className="text-red-400 text-sm mb-2">{stemError}</div>}
               {stems && (
                 <div className="space-y-2 mt-2">
-                  <a
-                    href={`data:audio/wav;base64,${stems.vocals}`}
-                    download={stems.vocalsFilename}
-                    className="block text-blue-400 underline"
-                  >
-                    Download Vocals
-                  </a>
-                  <a
-                    href={`data:audio/wav;base64,${stems.accompaniment}`}
-                    download={stems.accompanimentFilename}
-                    className="block text-blue-400 underline"
-                  >
-                    Download Accompaniment
-                  </a>
-                  <audio controls className="mt-2 w-full">
-                    <source src={`data:audio/wav;base64,${stems.vocals}`} type="audio/wav" />
-                    Your browser does not support the audio element.
-                  </audio>
-                  <audio controls className="mt-2 w-full">
-                    <source src={`data:audio/wav;base64,${stems.accompaniment}`} type="audio/wav" />
-                    Your browser does not support the audio element.
-                  </audio>
+                  {Object.entries(stems).map(([stem, { data, filename }]) => (
+                    <div key={stem} className="mb-2">
+                      <div className="font-medium text-purple-300 mb-1 capitalize">{stem}</div>
+                      <a
+                        href={`data:audio/wav;base64,${data}`}
+                        download={filename}
+                        className="block text-blue-400 underline mb-1"
+                      >
+                        Download {filename}
+                      </a>
+                      <audio controls className="w-full">
+                        <source src={`data:audio/wav;base64,${data}`} type="audio/wav" />
+                        Your browser does not support the audio element.
+                      </audio>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -589,6 +818,31 @@ export default function MusicGenerator() {
           />
         )}
       </AnimatePresence>
+
+      {/* Save Dialog Modal */}
+      {showSaveDialog && (
+        <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+          <DialogContent>
+            <DialogTitle>Save Track?</DialogTitle>
+            <div className="mb-4">Do you want to save this track to your library?</div>
+            <DialogFooter>
+              <Button
+                onClick={async () => {
+                  await handleSaveMusic()
+                  setShowSaveDialog(false)
+                }}
+                disabled={savingMusic}
+              >
+                {savingMusic ? "Saving..." : "Yes, Save"}
+              </Button>
+              <Button variant="outline" onClick={() => setShowSaveDialog(false)} disabled={savingMusic}>
+                No
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       <ToastMessage ref={toastRef} />
     </motion.div>
   )

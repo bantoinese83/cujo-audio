@@ -1,0 +1,240 @@
+[
+    {
+        "label": "os",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "os",
+        "description": "os",
+        "detail": "os",
+        "documentation": {}
+    },
+    {
+        "label": "shutil",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "shutil",
+        "description": "shutil",
+        "detail": "shutil",
+        "documentation": {}
+    },
+    {
+        "label": "pathlib",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "pathlib",
+        "description": "pathlib",
+        "detail": "pathlib",
+        "documentation": {}
+    },
+    {
+        "label": "Separator",
+        "importPath": "spleeter.separator",
+        "description": "spleeter.separator",
+        "isExtraImport": true,
+        "detail": "spleeter.separator",
+        "documentation": {}
+    },
+    {
+        "label": "falcon",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "falcon",
+        "description": "falcon",
+        "detail": "falcon",
+        "documentation": {}
+    },
+    {
+        "label": "MultipartMiddleware",
+        "importPath": "falcon_multipart.middleware",
+        "description": "falcon_multipart.middleware",
+        "isExtraImport": true,
+        "detail": "falcon_multipart.middleware",
+        "documentation": {}
+    },
+    {
+        "label": "uuid",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "uuid",
+        "description": "uuid",
+        "detail": "uuid",
+        "documentation": {}
+    },
+    {
+        "label": "Split",
+        "importPath": "Split",
+        "description": "Split",
+        "isExtraImport": true,
+        "detail": "Split",
+        "documentation": {}
+    },
+    {
+        "label": "ThreadPool",
+        "importPath": "multiprocessing.pool",
+        "description": "multiprocessing.pool",
+        "isExtraImport": true,
+        "detail": "multiprocessing.pool",
+        "documentation": {}
+    },
+    {
+        "label": "Timer",
+        "importPath": "threading",
+        "description": "threading",
+        "isExtraImport": true,
+        "detail": "threading",
+        "documentation": {}
+    },
+    {
+        "label": "split",
+        "kind": 2,
+        "importPath": "spleeter-api-server.Split.Split",
+        "description": "spleeter-api-server.Split.Split",
+        "peekOfCode": "def split(filepath, stems, uuid, high_freq=True):\n    stems = int(stems)\n    if not stems in [2, 4, 5]:\n        raise ValueError\n    global OUTPUT_DIR\n    global seperators\n    seperator = seperators['high_freq' if high_freq else 'low_freq'][stems]\n    outdir = os.path.join(TMP_DIR, f'{uuid}', \"\")\n    pathlib.Path(outdir).mkdir(parents=True, exist_ok=True)\n    seperator.separate_to_file(filepath, outdir)",
+        "detail": "spleeter-api-server.Split.Split",
+        "documentation": {}
+    },
+    {
+        "label": "TMP_DIR",
+        "kind": 5,
+        "importPath": "spleeter-api-server.Split.Split",
+        "description": "spleeter-api-server.Split.Split",
+        "peekOfCode": "TMP_DIR = os.getenv('TMP_DIR', '/tmp/spleeter-api/tmp')\nOUTPUT_DIR = os.getenv('OUTPUT_DIR', '/tmp/spleeter-api/output')\nseperators = {\n    'high_freq': {\n        2: Separator('spleeter:2stems-16kHz'),\n        4: Separator('spleeter:4stems-16kHz'),\n        5: Separator('spleeter:5stems-16kHz')\n    },\n    'low_freq': {\n        2: Separator('spleeter:2stems'),",
+        "detail": "spleeter-api-server.Split.Split",
+        "documentation": {}
+    },
+    {
+        "label": "OUTPUT_DIR",
+        "kind": 5,
+        "importPath": "spleeter-api-server.Split.Split",
+        "description": "spleeter-api-server.Split.Split",
+        "peekOfCode": "OUTPUT_DIR = os.getenv('OUTPUT_DIR', '/tmp/spleeter-api/output')\nseperators = {\n    'high_freq': {\n        2: Separator('spleeter:2stems-16kHz'),\n        4: Separator('spleeter:4stems-16kHz'),\n        5: Separator('spleeter:5stems-16kHz')\n    },\n    'low_freq': {\n        2: Separator('spleeter:2stems'),\n        4: Separator('spleeter:4stems'),",
+        "detail": "spleeter-api-server.Split.Split",
+        "documentation": {}
+    },
+    {
+        "label": "seperators",
+        "kind": 5,
+        "importPath": "spleeter-api-server.Split.Split",
+        "description": "spleeter-api-server.Split.Split",
+        "peekOfCode": "seperators = {\n    'high_freq': {\n        2: Separator('spleeter:2stems-16kHz'),\n        4: Separator('spleeter:4stems-16kHz'),\n        5: Separator('spleeter:5stems-16kHz')\n    },\n    'low_freq': {\n        2: Separator('spleeter:2stems'),\n        4: Separator('spleeter:4stems'),\n        5: Separator('spleeter:5stems')",
+        "detail": "spleeter-api-server.Split.Split",
+        "documentation": {}
+    },
+    {
+        "label": "Status",
+        "kind": 6,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "class Status:\n    def on_post(self, req, resp):\n        global statuses\n        uuid = req.media['id']\n        if uuid not in statuses:\n            resp.status = falcon.HTTP_404\n            return\n        t = statuses[uuid]\n        resp.media = {'id': uuid, 'status': 1} # Waiting\n        if t.ready():",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "Seperate",
+        "kind": 6,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "class Seperate:\n    def on_post(self, req, resp):\n        global statuses\n        global pool\n        global OUTPUT_DIR\n        global TMP_DIR\n        input_file = req.get_param('file')\n        if input_file.filename:\n            filename = input_file.filename\n            file_path = os.path.join(TMP_DIR, filename)",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "Download",
+        "kind": 6,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "class Download(object):\n    def on_get(self, req, resp, uuid):\n        global OUTPUT_DIR\n        zip_path = os.path.join(OUTPUT_DIR, f'{uuid}.zip')\n        if not os.path.exists(zip_path):\n            resp.status = falcon.HTTP_404\n            return\n        resp.status = falcon.HTTP_200\n        resp.content_type = 'application/zip'\n        with open(zip_path, 'rb') as f:",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "Health",
+        "kind": 6,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "class Health:\n    def on_get(self, req, resp):\n        resp.status = 200\n        resp.media = {\"status\": \"ok\"}\napi = falcon.API(middleware=[MultipartMiddleware()])\napi.add_route('/status', Status())\napi.add_route('/seperate', Seperate())\napi.add_route('/download/{uuid}', Download())\napi.add_route('/health', Health())",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "get_id",
+        "kind": 2,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "def get_id():\n    return _uuid.uuid4().hex\ndef clean(uuid):\n    global OUTPUT_DIR\n    zip_path = os.path.join(OUTPUT_DIR, f'{uuid}.zip')\n    os.remove(zip_path)\n    global statuses\n    statuses.pop(uuid, None) # Remove data\ndef add_task(uuid, task):\n    global statuses",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "clean",
+        "kind": 2,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "def clean(uuid):\n    global OUTPUT_DIR\n    zip_path = os.path.join(OUTPUT_DIR, f'{uuid}.zip')\n    os.remove(zip_path)\n    global statuses\n    statuses.pop(uuid, None) # Remove data\ndef add_task(uuid, task):\n    global statuses\n    statuses[uuid] = task\n    global clean_time",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "add_task",
+        "kind": 2,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "def add_task(uuid, task):\n    global statuses\n    statuses[uuid] = task\n    global clean_time\n    t = Timer(clean_time, clean, args=(uuid,))\n    t.start()\nclass Status:\n    def on_post(self, req, resp):\n        global statuses\n        uuid = req.media['id']",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "pool",
+        "kind": 5,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "pool = ThreadPool(processes=int(os.getenv('PROCESSES', \"4\")))\n# 定期清理\nfrom threading import Timer\nclean_time = int(os.getenv('CLEAN_TIME', \"3600\")) # An hour\nstatuses = {}\nTMP_DIR = os.getenv('TMP_DIR', '/tmp/spleeter-api/tmp')\nOUTPUT_DIR = os.getenv('OUTPUT_DIR', '/tmp/spleeter-api/output')\npathlib.Path(TMP_DIR).mkdir(parents=True, exist_ok=True)\npathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)\ndef get_id():",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "clean_time",
+        "kind": 5,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "clean_time = int(os.getenv('CLEAN_TIME', \"3600\")) # An hour\nstatuses = {}\nTMP_DIR = os.getenv('TMP_DIR', '/tmp/spleeter-api/tmp')\nOUTPUT_DIR = os.getenv('OUTPUT_DIR', '/tmp/spleeter-api/output')\npathlib.Path(TMP_DIR).mkdir(parents=True, exist_ok=True)\npathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)\ndef get_id():\n    return _uuid.uuid4().hex\ndef clean(uuid):\n    global OUTPUT_DIR",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "statuses",
+        "kind": 5,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "statuses = {}\nTMP_DIR = os.getenv('TMP_DIR', '/tmp/spleeter-api/tmp')\nOUTPUT_DIR = os.getenv('OUTPUT_DIR', '/tmp/spleeter-api/output')\npathlib.Path(TMP_DIR).mkdir(parents=True, exist_ok=True)\npathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)\ndef get_id():\n    return _uuid.uuid4().hex\ndef clean(uuid):\n    global OUTPUT_DIR\n    zip_path = os.path.join(OUTPUT_DIR, f'{uuid}.zip')",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "TMP_DIR",
+        "kind": 5,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "TMP_DIR = os.getenv('TMP_DIR', '/tmp/spleeter-api/tmp')\nOUTPUT_DIR = os.getenv('OUTPUT_DIR', '/tmp/spleeter-api/output')\npathlib.Path(TMP_DIR).mkdir(parents=True, exist_ok=True)\npathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)\ndef get_id():\n    return _uuid.uuid4().hex\ndef clean(uuid):\n    global OUTPUT_DIR\n    zip_path = os.path.join(OUTPUT_DIR, f'{uuid}.zip')\n    os.remove(zip_path)",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "OUTPUT_DIR",
+        "kind": 5,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "OUTPUT_DIR = os.getenv('OUTPUT_DIR', '/tmp/spleeter-api/output')\npathlib.Path(TMP_DIR).mkdir(parents=True, exist_ok=True)\npathlib.Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)\ndef get_id():\n    return _uuid.uuid4().hex\ndef clean(uuid):\n    global OUTPUT_DIR\n    zip_path = os.path.join(OUTPUT_DIR, f'{uuid}.zip')\n    os.remove(zip_path)\n    global statuses",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    },
+    {
+        "label": "api",
+        "kind": 5,
+        "importPath": "spleeter-api-server.api",
+        "description": "spleeter-api-server.api",
+        "peekOfCode": "api = falcon.API(middleware=[MultipartMiddleware()])\napi.add_route('/status', Status())\napi.add_route('/seperate', Seperate())\napi.add_route('/download/{uuid}', Download())\napi.add_route('/health', Health())",
+        "detail": "spleeter-api-server.api",
+        "documentation": {}
+    }
+]

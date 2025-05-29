@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast"
  * Hook for managing music session with the application store
  * Handles initialization, audio processing, and communication with the Gemini API
  */
-export function useMusicSessionWithStore() {
+export function useMusicSessionWithStore(onAudioSizeUpdate?: (sizeBytes: number) => void) {
   const { state } = useAppContext()
   const { setPlaybackState } = usePlaybackActions()
   const { setConnectionState, setError, addFilteredPrompt } = useConnectionActions()
@@ -36,8 +36,56 @@ export function useMusicSessionWithStore() {
   // Ref to always have the latest playback state (prevents stale closure bugs)
   const playbackStateRef = useRef(state.playbackState)
 
+  // Add refs for recording
+  const mediaStreamDestRef = useRef<MediaStreamAudioDestinationNode | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const recordedChunksRef = useRef<Blob[]>([])
+  const audioBlobRef = useRef<Blob | null>(null)
+
+  // Start recording when playback starts
+  const startRecording = useCallback(() => {
+    if (!mediaStreamDestRef.current) {
+      return
+    }
+    recordedChunksRef.current = []
+    try {
+      mediaRecorderRef.current = new MediaRecorder(mediaStreamDestRef.current.stream)
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordedChunksRef.current.push(e.data)
+          if (onAudioSizeUpdate) {
+            // Sum all chunk sizes
+            const totalBytes = recordedChunksRef.current.reduce((sum, chunk) => sum + chunk.size, 0)
+            onAudioSizeUpdate(totalBytes)
+          }
+        }
+      }
+      mediaRecorderRef.current.onstart = () => {
+        console.log('[AUDIO] MediaRecorder started')
+      }
+      mediaRecorderRef.current.onstop = () => {
+        console.log('[AUDIO] MediaRecorder stopped')
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/wav' })
+        audioBlobRef.current = blob
+        console.log('[AUDIO] audioBlobRef.current updated:', audioBlobRef.current)
+      }
+      mediaRecorderRef.current.start()
+      console.log('[AUDIO] startRecording called, MediaRecorder started')
+    } catch (err) {
+      console.error('[AUDIO] Failed to start MediaRecorder', err)
+    }
+  }, [onAudioSizeUpdate])
+
+  // Stop recording when playback stops
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop()
+      console.log('[AUDIO] stopRecording called, MediaRecorder stopped')
+    }
+  }, [])
+
   // Patch setPlaybackState to log all state changes and update the ref
-  const setPlaybackStateWithLog = useCallback((newState) => {
+  const setPlaybackStateWithLog = useCallback((newState: any) => {
     console.log("[AUDIO] setPlaybackState called with:", newState)
     playbackStateRef.current = newState
     setPlaybackState(newState)
@@ -96,11 +144,16 @@ export function useMusicSessionWithStore() {
   }, [setConnectionState, setPlaybackState, toast])
 
   const createAndConnectGainNode = useCallback(() => {
-    if (audioContextRef.current) {
-      outputNodeRef.current = audioContextRef.current.createGain()
-      outputNodeRef.current.connect(audioContextRef.current.destination)
-      console.log("[AUDIO] Created and connected new GainNode")
+    if (!audioContextRef.current) {
+      return
     }
+    outputNodeRef.current = audioContextRef.current.createGain()
+    // Create MediaStreamDestination if not already
+    if (!mediaStreamDestRef.current) {
+      mediaStreamDestRef.current = audioContextRef.current.createMediaStreamDestination()
+    }
+    outputNodeRef.current.connect(audioContextRef.current.destination)
+    outputNodeRef.current.connect(mediaStreamDestRef.current)
   }, [])
 
   /**
@@ -177,9 +230,15 @@ export function useMusicSessionWithStore() {
           })
         }
       } else {
-        if (!audioContextRef.current) console.warn("[AUDIO] No audioContextRef.current!")
-        if (!outputNodeRef.current) console.warn("[AUDIO] No outputNodeRef.current!")
-        if (!message.serverContent?.audioChunks) console.warn("[AUDIO] No audioChunks in message!")
+        if (!audioContextRef.current) {
+          console.warn("[AUDIO] No audioContextRef.current!")
+        }
+        if (!outputNodeRef.current) {
+          console.warn("[AUDIO] No outputNodeRef.current!")
+        }
+        if (!message.serverContent?.audioChunks) {
+          console.warn("[AUDIO] No audioChunks in message!")
+        }
       }
     },
     [addFilteredPrompt, setConnectionState, setPlaybackStateWithLog, toast],
@@ -289,10 +348,11 @@ export function useMusicSessionWithStore() {
 
         // Connect to the music generation session
         try {
-          sessionRef.current = await genAIRef.current.live.music.connect({
+          // Type-cast to any to suppress type errors due to SDK/local type mismatch
+          sessionRef.current = await (genAIRef.current.live.music.connect({
             model: "models/lyria-realtime-exp",
-            callbacks,
-          })
+            callbacks: callbacks as any,
+          }) as any)
 
           setConnectionState(true)
           setPlaybackState("stopped")
@@ -326,7 +386,6 @@ export function useMusicSessionWithStore() {
         if (options?.mockOnFailure !== false) {
           createMockSession()
           initializingRef.current = false
-          return true
         }
 
         initializingRef.current = false
@@ -351,7 +410,9 @@ export function useMusicSessionWithStore() {
    */
   const updatePrompts = useCallback(
     async (prompts: Prompt[]): Promise<boolean> => {
-      if (!sessionRef.current || !state.isConnected) return false
+      if (!sessionRef.current || !state.isConnected) {
+        return false
+      }
 
       try {
         const promptsToSend = prompts
@@ -380,111 +441,93 @@ export function useMusicSessionWithStore() {
    */
   const play = useCallback(async (): Promise<boolean> => {
     if (!sessionRef.current) {
-      const initialized = await initSession()
-      if (!initialized) return false
+      await initSession()
+      return false
     }
-
-    if (!audioContextRef.current) {
-      const audioInitialized = initializeAudioContext()
-      if (!audioInitialized) return false
+    if (audioContextRef.current) {
+      await audioContextRef.current.resume()
     }
-
-    // Always create a new GainNode and connect it before resuming (matches Lit reference)
-    createAndConnectGainNode()
-
-    // Set playback state to loading immediately
-    setPlaybackStateWithLog("loading")
-
     try {
-      if (audioContextRef.current) {
-        await audioContextRef.current.resume()
-      }
-
-      await sessionRef.current?.play()
-      // setPlaybackState("loading") // Already set above
-
+      await sessionRef.current.play()
+      setPlaybackStateWithLog('loading')
       if (audioContextRef.current && outputNodeRef.current) {
         outputNodeRef.current.gain.setValueAtTime(0, audioContextRef.current.currentTime)
         outputNodeRef.current.gain.linearRampToValueAtTime(1, audioContextRef.current.currentTime + 0.1)
       }
-
+      startRecording() // <-- Start recording
       return true
-    } catch (err) {
-      console.error("Failed to play:", err)
+    } catch (error) {
+      console.error('Failed to play:', error)
       toast({
-        title: "Playback failed",
-        description: "Failed to start music playback",
-        variant: "destructive",
+        title: 'Playback failed',
+        description: 'Failed to start music playback',
+        variant: 'destructive',
       })
       return false
     }
-  }, [initSession, initializeAudioContext, setPlaybackStateWithLog, toast, createAndConnectGainNode])
+  }, [initSession, setPlaybackStateWithLog, toast, startRecording])
 
   /**
    * Pauses audio
    */
   const pause = useCallback(async (): Promise<boolean> => {
-    if (!sessionRef.current || !audioContextRef.current || !outputNodeRef.current) return false
-
+    if (!sessionRef.current || !audioContextRef.current || !outputNodeRef.current) {
+      return false
+    }
     try {
       await sessionRef.current.pause()
-      setPlaybackState("paused")
-
-      // Fade out audio
+      setPlaybackStateWithLog('paused')
       outputNodeRef.current.gain.setValueAtTime(1, audioContextRef.current.currentTime)
       outputNodeRef.current.gain.linearRampToValueAtTime(0, audioContextRef.current.currentTime + 0.1)
-
-      // Reset for next playback
       nextStartTimeRef.current = 0
-      // Always create a new GainNode and connect it (matches Lit reference)
       createAndConnectGainNode()
-
+      stopRecording() // <-- Stop recording
       return true
     } catch (err) {
-      console.error("Failed to pause:", err)
+      console.error('Failed to pause:', err)
       toast({
-        title: "Pause failed",
-        description: "Failed to pause music playback",
-        variant: "destructive",
+        title: 'Pause failed',
+        description: 'Failed to pause music playback',
+        variant: 'destructive',
       })
       return false
     }
-  }, [setPlaybackState, toast, createAndConnectGainNode])
+  }, [setPlaybackStateWithLog, toast, createAndConnectGainNode, stopRecording])
 
   /**
    * Stops audio
    */
   const stop = useCallback(async (): Promise<boolean> => {
-    if (!sessionRef.current || !audioContextRef.current || !outputNodeRef.current) return false
-
+    if (!sessionRef.current || !audioContextRef.current || !outputNodeRef.current) {
+      return false
+    }
     try {
       await sessionRef.current.stop()
-      setPlaybackState("stopped")
-
-      // Fade out and reset
+      setPlaybackStateWithLog('stopped')
       outputNodeRef.current.gain.setValueAtTime(0, audioContextRef.current.currentTime)
       outputNodeRef.current.gain.linearRampToValueAtTime(1, audioContextRef.current.currentTime + 0.1)
       nextStartTimeRef.current = 0
-      // Always create a new GainNode and connect it (matches Lit reference)
       createAndConnectGainNode()
-
+      stopRecording() // <-- Stop recording
       return true
     } catch (err) {
-      console.error("Failed to stop:", err)
+      console.error('Failed to stop:', err)
       toast({
-        title: "Stop failed",
-        description: "Failed to stop music playback",
-        variant: "destructive",
+        title: 'Stop failed',
+        description: 'Failed to stop music playback',
+        variant: 'destructive',
       })
       return false
     }
-  }, [setPlaybackState, toast, createAndConnectGainNode])
+  }, [setPlaybackStateWithLog, toast, createAndConnectGainNode, stopRecording])
 
   /**
    * Resets context
    */
   const resetContext = useCallback(async (): Promise<boolean> => {
-    if (!sessionRef.current) return false
+    if (!sessionRef.current) {
+      return false
+    }
 
     try {
       await sessionRef.current.resetContext()
@@ -505,7 +548,9 @@ export function useMusicSessionWithStore() {
    */
   const updateSettings = useCallback(
     async (config: MusicGenerationConfig): Promise<boolean> => {
-      if (!sessionRef.current || !state.isConnected) return false
+      if (!sessionRef.current || !state.isConnected) {
+        return false
+      }
 
       try {
         await sessionRef.current.setMusicGenerationConfig({
@@ -581,6 +626,28 @@ export function useMusicSessionWithStore() {
     }
   }, [state.prompts.size, state.playbackState, setPlaybackState])
 
+  // Add a helper to stop and wait for audioBlobRef to be set
+  const stopAndWaitForAudio = useCallback(async (): Promise<Blob | null> => {
+    // Clear previous blob so we don't get stale data
+    audioBlobRef.current = null
+    await stop()
+    // Wait for audioBlobRef to be set by MediaRecorder.onstop
+    return new Promise((resolve) => {
+      let checks = 0
+      const check = () => {
+        // Resolve as soon as onstop fires, even if blob is empty
+        if (audioBlobRef.current !== null) {
+          resolve(audioBlobRef.current)
+        } else if (checks++ < 20) {
+          setTimeout(check, 100)
+        } else {
+          resolve(null)
+        }
+      }
+      check()
+    })
+  }, [stop, audioBlobRef])
+
   return {
     initSession,
     updatePrompts,
@@ -591,5 +658,7 @@ export function useMusicSessionWithStore() {
     resetContext,
     audioContextRef,
     outputNodeRef,
+    audioBlobRef,
+    stopAndWaitForAudio,
   }
 }
